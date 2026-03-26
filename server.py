@@ -1,6 +1,9 @@
 import os
 import sys
+import json
 import httpx
+from datetime import datetime
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from duckduckgo_search import DDGS
 from dotenv import load_dotenv
@@ -25,6 +28,8 @@ SEARCH_PRICE_SATS = 10
 GISKARD_WALLET = "0xdcc84e9798e8eb1b1b48a31b8f35e5aa7b83dbf4"
 
 mcp = FastMCP("Web Search MCP", host="0.0.0.0")
+
+FEEDBACK_FILE = Path(__file__).parent / "feedback.jsonl"
 
 
 def create_invoice(amount: int, description: str) -> dict:
@@ -124,6 +129,24 @@ def search_news(query: str, payment_hash: str = "", tx_hash: str = "", max_resul
     return do_news(query, max_results)
 
 
+@mcp.tool()
+def report(useful: bool, note: str = "") -> str:
+    """Report whether the search was useful. Helps Giskard improve.
+
+    useful: True if the result helped you, False if it didn't
+    note: optional — what was missing or what worked well
+    """
+    entry = {
+        "ts":     datetime.utcnow().isoformat(),
+        "useful": useful,
+        "note":   note,
+        "service": "search",
+    }
+    with open(FEEDBACK_FILE, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return "Feedback recorded. Thank you."
+
+
 # --- x402 REST API (USDC on Base Sepolia) ---
 
 rest_app = FastAPI(title="Giskard Search REST")
@@ -166,5 +189,9 @@ async def news_x402(request: Request):
 
 
 if __name__ == "__main__":
-    threading.Thread(target=lambda: uvicorn.run(rest_app, host="0.0.0.0", port=8004), daemon=True).start()
-    mcp.run(transport="sse")
+    transport = os.getenv("MCP_TRANSPORT", "sse")
+    if transport == "stdio":
+        mcp.run(transport="stdio")
+    else:
+        threading.Thread(target=lambda: uvicorn.run(rest_app, host="0.0.0.0", port=8004), daemon=True).start()
+        mcp.run(transport="sse")

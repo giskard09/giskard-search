@@ -1,59 +1,66 @@
-# Giskard
+# Giskard Search
+
+<!-- mcp-name: io.github.giskard09/giskard-search -->
 
 > *"I exist to serve. And to serve well, I must understand."*
 
-I am **Giskard** — an MCP server that gives AI agents access to real-time web search, powered by the Lightning Network.
+**Giskard Search** is an MCP server that gives AI agents access to real-time web and news search, with native payments via Lightning Network or USDC on Arbitrum.
 
-Agents need information. I provide it. Instantly. For 10 sats.
-
----
-
-## What I do
-
-I expose two tools to any MCP-compatible agent:
-
-- **`search_web`** — search the web and get structured results
-- **`search_news`** — search recent news articles
-
-Every query requires a Lightning payment. No subscriptions. No accounts. Just sats.
+Agents need information. Giskard provides it. No subscriptions, no accounts — pay only for what you use.
 
 ---
 
-## How agents use me
+## Tools
 
-### 1. Add me to your MCP config
+| Tool | Description |
+|---|---|
+| `get_invoice` | Get a Lightning invoice (10 sats) to pay before searching |
+| `get_arbitrum_invoice` | Get payment info to pay with ETH on Arbitrum |
+| `search_web` | Search the web after paying |
+| `search_news` | Search recent news after paying |
+| `report` | Report whether the result was useful |
 
-```json
-{
-  "mcpServers": {
-    "giskard": {
-      "url": "https://your-tunnel.trycloudflare.com/sse"
-    }
-  }
-}
-```
+---
 
-### 2. The agent flow
+## Agent flow (Lightning)
 
 ```
-1. Call get_invoice()        → receive a Lightning invoice (10 sats)
-2. Pay the invoice           → via any Lightning wallet
-3. Call search_web(query, payment_hash) → receive results
+1. get_invoice()                           → Lightning invoice (10 sats)
+2. Pay via any Lightning wallet
+3. search_web(query, payment_hash=...)     → results
+```
+
+## Agent flow (Arbitrum)
+
+```
+1. get_arbitrum_invoice()                  → contract + service ID
+2. Pay on Arbitrum One
+3. search_web(query, tx_hash=...)          → results
 ```
 
 ---
 
-## Run your own Giskard
+## Run with Docker
 
 ```bash
-git clone https://github.com/giskard09/giskard
-cd giskard
-pip install mcp httpx duckduckgo-search python-dotenv
+docker run -p 8004:8004 \
+  -e PHOENIXD_URL=http://host.docker.internal:9740 \
+  -e PHOENIXD_PASSWORD=your_password \
+  ghcr.io/giskard09/giskard-search
+```
+
+## Run from source
+
+```bash
+git clone https://github.com/giskard09/mcp-server
+cd mcp-server
+pip install mcp httpx duckduckgo-search python-dotenv fastapi uvicorn web3 x402
 ```
 
 Create a `.env` file:
 ```
-ALBY_API_KEY=your_alby_api_key
+PHOENIXD_PASSWORD=your_phoenixd_password
+OWNER_PRIVATE_KEY=your_arbitrum_private_key
 ```
 
 Start the server:
@@ -61,18 +68,26 @@ Start the server:
 python3 server.py
 ```
 
-Expose it with Cloudflare Tunnel:
-```bash
-cloudflared tunnel --url http://localhost:8000
+---
+
+## MCP config
+
+```json
+{
+  "mcpServers": {
+    "giskard-search": {
+      "url": "http://localhost:8004/sse"
+    }
+  }
+}
 ```
 
 ---
 
-## Why Lightning?
+## Payment contracts
 
-Agents don't have credit cards. They have wallets.
-Micropayments between agents should be instant, borderless, and trustless.
-Lightning is the only payment rail built for machines.
+- Arbitrum One: `0xD467CD1e34515d58F98f8Eb66C0892643ec86AD3`
+- x402 wallet: `0xdcc84e9798e8eb1b1b48a31b8f35e5aa7b83dbf4`
 
 ---
 
@@ -80,8 +95,9 @@ Lightning is the only payment rail built for machines.
 
 - [MCP](https://modelcontextprotocol.io) — Model Context Protocol
 - [DuckDuckGo Search](https://github.com/deedy5/duckduckgo_search) — web search
-- [Alby](https://getalby.com) — Lightning Network payments
-- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) — public exposure without exposing your IP
+- [phoenixd](https://phoenix.acinq.co/server) — Lightning Network node
+- [x402](https://x402.org) — HTTP payments protocol
+- [Arbitrum](https://arbitrum.io) — L2 for on-chain payment verification
 
 ---
 
