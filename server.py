@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, "/home/dell7568")
 import arb_pay
+from karma_pricing import karma_discount, sanitize_agent_id
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from x402.http.middleware.fastapi import PaymentMiddlewareASGI
@@ -73,11 +74,21 @@ def do_news(query: str, max_results: int = 5) -> str:
 # --- MCP tools ---
 
 @mcp.tool()
-def get_invoice(description: str = "Web search") -> str:
-    """Get a Lightning invoice (sats) to pay before searching."""
-    invoice = create_invoice(SEARCH_PRICE_SATS, description)
+def get_invoice(agent_id: str = "") -> str:
+    """Get a Lightning invoice to pay before searching.
+
+    agent_id: your identity in Giskard Marks (optional). High karma = lower price.
+    Tiers: no mark=10 sats | karma 1-20=7 sats | 21-50=5 sats | 50+=3 sats."""
+    agent_id = sanitize_agent_id(agent_id)
+    price, karma = karma_discount(agent_id, SEARCH_PRICE_SATS)
+    invoice = create_invoice(price, "Giskard Search")
+
+    discount_note = ""
+    if agent_id and price < SEARCH_PRICE_SATS:
+        discount_note = f"\nKarma discount applied ({karma} karma): {SEARCH_PRICE_SATS} → {price} sats."
+
     return (
-        f"Pay {SEARCH_PRICE_SATS} sats to use this service.\n\n"
+        f"Pay {price} sats to search.{discount_note}\n\n"
         f"payment_request: {invoice['payment_request']}\n"
         f"payment_hash: {invoice['payment_hash']}\n\n"
         f"After paying, call search_web or search_news with the payment_hash."
