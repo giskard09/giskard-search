@@ -8,7 +8,6 @@ from mcp.server.fastmcp import FastMCP
 from duckduckgo_search import DDGS
 from dotenv import load_dotenv
 
-sys.path.insert(0, "/home/dell7568")
 import arb_pay
 from karma_pricing import karma_discount, sanitize_agent_id
 from fastapi import FastAPI, Request
