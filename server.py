@@ -199,7 +199,7 @@ async def news_x402(request: Request):
 
 
 if __name__ == "__main__":
-    transport = os.getenv("MCP_TRANSPORT", "sse")
+    transport = os.getenv("MCP_TRANSPORT", "stdio" if not sys.stdin.isatty() else "sse")
     if transport == "stdio":
         mcp.run(transport="stdio")
     else:
