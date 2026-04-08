@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import httpx
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,11 @@ PHOENIXD_PASSWORD = os.getenv("PHOENIXD_PASSWORD")
 PHOENIXD_URL = "http://127.0.0.1:9740"
 SEARCH_PRICE_SATS = 10
 GISKARD_WALLET = "0xdcc84e9798e8eb1b1b48a31b8f35e5aa7b83dbf4"
+
+SERVICE_NAME = "giskard-search"
+SERVICE_VERSION = "0.1.1"
+SERVICE_PORT = 8000
+_started_at = time.time()
 
 mcp = FastMCP("Web Search MCP", host="0.0.0.0")
 
@@ -71,6 +77,21 @@ def do_news(query: str, max_results: int = 5) -> str:
 
 
 # --- MCP tools ---
+
+@mcp.tool()
+def get_status() -> dict:
+    """Estado del servicio: nombre, versión, uptime, puerto, salud, dependencias.
+    Read-only, gratis, sin pago. Útil para monitoreo y health checks."""
+    return {
+        "service": SERVICE_NAME,
+        "version": SERVICE_VERSION,
+        "port": SERVICE_PORT,
+        "uptime_seconds": int(time.time() - _started_at),
+        "healthy": bool(PHOENIXD_PASSWORD),
+        "dependencies": ["phoenixd", "duckduckgo", "arbitrum-rpc"],
+        "pricing": {"base_sats": SEARCH_PRICE_SATS, "karma_discount": True},
+    }
+
 
 @mcp.tool()
 def get_invoice(agent_id: str = "") -> str:
