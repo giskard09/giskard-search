@@ -1,15 +1,23 @@
 """
 Módulo compartido — karma-tiered pricing para Giskard MCP servers.
 
-Cadena: Marks (identidad) → Argentum (karma) → precio del servicio
+Cadena: Marks (identidad + pub_key) → Argentum (karma) → precio del servicio
 
-Uso:
-    from karma_pricing import karma_discount
+Uso básico (sin firma, compat con clientes viejos):
+    price, karma = karma_discount(agent_id, base_price=21)
 
-    price = karma_discount(agent_id, base_price=21)
+Uso con firma (cierra el hueco de agent_id autodeclarado):
+    price, karma = karma_discount(
+        agent_id,
+        base_price=21,
+        signature=sig_b64,
+        timestamp=ts,
+        nonce=nonce,
+    )
 
-KNOWN GAP: agent_id es autodeclarado. Sin firma criptográfica todavía.
-Cualquier failure en Marks/Argentum retorna base_price sin romper el flujo.
+Política opt-in: sin firma → SIEMPRE base_price. Descuento solo cuando la firma
+es válida. Clientes que no firman siguen funcionando, solo pagan tarifa plena.
+Esto mantiene compat con la inspección de Glama (mcp-proxy no firma).
 """
 import re
 import httpx
@@ -51,18 +59,44 @@ def _get_karma(agent_id: str) -> int:
     return 0
 
 
-def karma_discount(agent_id: str, base_price: int) -> tuple:
+def _verify_signature(agent_id: str, signature: str, timestamp, nonce: str) -> bool:
+    """Opt-in Ed25519 verification. Import is lazy so karma_pricing stays
+    import-safe even if agent_signing or pynacl aren't present on a given host."""
+    try:
+        from agent_signing import verify_request
+    except Exception:
+        return False
+    try:
+        return verify_request(agent_id, signature, timestamp, nonce)
+    except Exception:
+        return False
+
+
+def karma_discount(
+    agent_id: str,
+    base_price: int,
+    signature: str = "",
+    timestamp=None,
+    nonce: str = "",
+) -> tuple:
     """
     Returns (price, karma) for the given agent_id.
 
     price  — sats to charge (>= 1, always)
-    karma  — karma of the agent (0 if unknown)
+    karma  — karma of the agent (0 if unknown or unsigned)
 
-    Falls back silently to (base_price, 0) on any failure.
+    Sin firma válida → (base_price, 0). Falls back silently on any failure.
     """
     if not agent_id:
         return base_price, 0
     agent_id = sanitize_agent_id(agent_id)
+
+    # Opt-in: descuento solo si la firma verifica. Sin firma → base_price.
+    if not (signature and timestamp is not None and nonce):
+        return base_price, 0
+    if not _verify_signature(agent_id, signature, timestamp, nonce):
+        return base_price, 0
+
     if not _verify_mark(agent_id):
         return base_price, 0
     karma = _get_karma(agent_id)
