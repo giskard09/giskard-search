@@ -94,13 +94,16 @@ def get_status() -> dict:
 
 
 @mcp.tool()
-def get_invoice(agent_id: str = "") -> str:
+def get_invoice(agent_id: str = "", signature: str = "", timestamp: int = 0, nonce: str = "") -> str:
     """Get a Lightning invoice to pay before searching.
 
     agent_id: your identity in Giskard Marks (optional). High karma = lower price.
+    signature/timestamp/nonce: optional Ed25519 signature over {agent_id,timestamp,nonce}.
+        Without a valid signature you pay the base price (10 sats). With a valid signature
+        you get karma tiers: 1-20=7 sats | 21-50=5 sats | 50+=3 sats.
     Tiers: no mark=10 sats | karma 1-20=7 sats | 21-50=5 sats | 50+=3 sats."""
     agent_id = sanitize_agent_id(agent_id)
-    price, karma = karma_discount(agent_id, SEARCH_PRICE_SATS)
+    price, karma = karma_discount(agent_id, SEARCH_PRICE_SATS, signature=signature, timestamp=timestamp or None, nonce=nonce)
     invoice = create_invoice(price, "Giskard Search")
 
     discount_note = ""
