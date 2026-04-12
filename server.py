@@ -120,7 +120,12 @@ def get_invoice(agent_id: str = "", signature: str = "", timestamp: int = 0, non
 
 @mcp.tool()
 def get_arbitrum_invoice() -> str:
-    """Get payment info to pay with ETH on Arbitrum instead of Lightning."""
+    """Get payment info to pay with ETH on Arbitrum instead of Lightning.
+
+    Alternative to get_invoice for agents without Lightning wallets.
+    Returns contract address, service ID, and instructions.
+    After paying on-chain, call search_web or search_news with the tx_hash.
+    Each tx_hash can only be used once (marked as consumed after verification)."""
     info = arb_pay.get_invoice_info("search")
     return (
         f"Pay {info['price_eth']} ETH on {info['network']}.\n\n"
@@ -133,7 +138,16 @@ def get_arbitrum_invoice() -> str:
 
 @mcp.tool()
 def search_web(query: str, payment_hash: str = "", tx_hash: str = "", max_results: int = 5) -> str:
-    """Search the web. Pay with Lightning (payment_hash) or Arbitrum ETH (tx_hash)."""
+    """Search the web using DuckDuckGo. Requires prior payment.
+
+    query: search terms (natural language or keywords)
+    payment_hash: from get_invoice (Lightning). One-time use.
+    tx_hash: from get_arbitrum_invoice (Arbitrum ETH). One-time use.
+    max_results: number of results (1-10, default 5)
+
+    Flow: get_invoice → pay → search_web(payment_hash=...).
+    Side effects: consumes the payment (cannot reuse same hash).
+    Idempotent: no, each call requires a new payment."""
     if payment_hash:
         if not check_invoice(payment_hash):
             return "Lightning payment not settled. Call get_invoice first."
@@ -149,7 +163,16 @@ def search_web(query: str, payment_hash: str = "", tx_hash: str = "", max_result
 
 @mcp.tool()
 def search_news(query: str, payment_hash: str = "", tx_hash: str = "", max_results: int = 5) -> str:
-    """Search recent news. Pay with Lightning (payment_hash) or Arbitrum ETH (tx_hash)."""
+    """Search recent news using DuckDuckGo News. Requires prior payment.
+
+    query: search terms (natural language or keywords)
+    payment_hash: from get_invoice (Lightning). One-time use.
+    tx_hash: from get_arbitrum_invoice (Arbitrum ETH). One-time use.
+    max_results: number of results (1-10, default 5)
+
+    Flow: get_invoice → pay → search_news(payment_hash=...).
+    Same payment rules as search_web. Use search_news for time-sensitive queries,
+    search_web for general knowledge."""
     if payment_hash:
         if not check_invoice(payment_hash):
             return "Lightning payment not settled. Call get_invoice first."
