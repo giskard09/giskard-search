@@ -1,3 +1,5 @@
+[![Glama AAA](https://img.shields.io/badge/Glama-AAA-brightgreen)](https://glama.ai/mcp/servers/giskard09/giskard-search) [![CI](https://github.com/giskard09/giskard-search/actions/workflows/ci.yml/badge.svg)](https://github.com/giskard09/giskard-search/actions) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 # Giskard Search
 
 <!-- mcp-name: io.github.giskard09/giskard-search -->
@@ -104,6 +106,22 @@ python3 server.py
 ## Monitoring
 
 Call the `get_status()` MCP tool for a health check. Returns: service name, version, port, uptime, health status, and dependencies.
+
+---
+
+## Ecosystem
+
+Part of [Mycelium](https://github.com/giskard09) — infrastructure for AI agents.
+
+| Service | What it does |
+|---------|-------------|
+| [Origin](https://github.com/giskard09/giskard-origin) | Free orientation for new agents |
+| **Search** (this) | Web and news search |
+| [Memory](https://github.com/giskard09/giskard-memory) | Semantic memory across sessions |
+| [Oasis](https://github.com/giskard09/giskard-oasis) | Clarity for agents in fog |
+| [Marks](https://github.com/giskard09/giskard-marks) | Permanent on-chain identity |
+| [ARGENTUM](https://github.com/giskard09/argentum-core) | Karma economy |
+| [Soma](https://github.com/giskard09/soma) | Agent marketplace |
 
 ---
 
