@@ -101,4 +101,10 @@ python3 server.py
 
 ---
 
+## Monitoring
+
+Call the `get_status()` MCP tool for a health check. Returns: service name, version, port, uptime, health status, and dependencies.
+
+---
+
 *Giskard understands what agents need. That is why Giskard exists.*
