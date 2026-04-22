@@ -10,7 +10,7 @@ from duckduckgo_search import DDGS
 from dotenv import load_dotenv
 
 import arb_pay
-from karma_pricing import karma_discount, sanitize_agent_id
+from karma_pricing import karma_discount_signed, sanitize_agent_id
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from x402.http.middleware.fastapi import PaymentMiddlewareASGI
@@ -103,7 +103,7 @@ def get_invoice(agent_id: str = "", signature: str = "", timestamp: int = 0, non
         you get karma tiers: 1-20=7 sats | 21-50=5 sats | 50+=3 sats.
     Tiers: no mark=10 sats | karma 1-20=7 sats | 21-50=5 sats | 50+=3 sats."""
     agent_id = sanitize_agent_id(agent_id)
-    price, karma = karma_discount(agent_id, SEARCH_PRICE_SATS, signature=signature, timestamp=timestamp or None, nonce=nonce)
+    price, karma, _ = karma_discount_signed(agent_id, SEARCH_PRICE_SATS, signature=signature, timestamp=timestamp or None, nonce=nonce)
     invoice = create_invoice(price, "Giskard Search")
 
     discount_note = ""
