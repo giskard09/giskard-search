@@ -15,9 +15,22 @@ Uso con firma (cierra el hueco de agent_id autodeclarado):
         nonce=nonce,
     )
 
+Uso con flag de firma expuesto (habilita trails de agentes firmados sin karma):
+    price, karma, sig_verified = karma_discount_signed(
+        agent_id,
+        base_price=21,
+        signature=sig_b64,
+        timestamp=ts,
+        nonce=nonce,
+    )
+
 Política opt-in: sin firma → SIEMPRE base_price. Descuento solo cuando la firma
 es válida. Clientes que no firman siguen funcionando, solo pagan tarifa plena.
 Esto mantiene compat con la inspección de Glama (mcp-proxy no firma).
+
+Precondición del rollout Mycelium Trails v1: servers que quieran grabar trails
+de agentes firmados (aunque karma=0) usan karma_discount_signed y condicionan
+record_trail sobre sig_verified en vez de karma>0.
 """
 import re
 import httpx
@@ -72,6 +85,41 @@ def _verify_signature(agent_id: str, signature: str, timestamp, nonce: str) -> b
         return False
 
 
+def _compute_discount(
+    agent_id: str,
+    base_price: int,
+    signature: str,
+    timestamp,
+    nonce: str,
+) -> tuple:
+    """Internal: returns (price, karma, sig_verified) — the canonical result.
+
+    sig_verified is orthogonal to pricing — it reports whether the Ed25519
+    signature verified, regardless of whether the agent has a mark or karma.
+    Downstream code (mycelium_trails, etc) uses this flag to decide whether
+    to treat the agent_id as authenticated.
+    """
+    if not agent_id:
+        return base_price, 0, False
+    agent_id = sanitize_agent_id(agent_id)
+
+    if not (signature and timestamp is not None and nonce):
+        return base_price, 0, False
+    if not _verify_signature(agent_id, signature, timestamp, nonce):
+        return base_price, 0, False
+
+    sig_verified = True
+
+    if not _verify_mark(agent_id):
+        return base_price, 0, sig_verified
+    karma = _get_karma(agent_id)
+    for threshold, fraction in TIERS:
+        if karma >= threshold:
+            price = max(1, int(base_price * fraction))
+            return price, karma, sig_verified
+    return base_price, 0, sig_verified
+
+
 def karma_discount(
     agent_id: str,
     base_price: int,
@@ -80,28 +128,31 @@ def karma_discount(
     nonce: str = "",
 ) -> tuple:
     """
-    Returns (price, karma) for the given agent_id.
+    Returns (price, karma) for the given agent_id. Backward-compatible API.
 
     price  — sats to charge (>= 1, always)
     karma  — karma of the agent (0 if unknown or unsigned)
 
     Sin firma válida → (base_price, 0). Falls back silently on any failure.
     """
-    if not agent_id:
-        return base_price, 0
-    agent_id = sanitize_agent_id(agent_id)
+    price, karma, _ = _compute_discount(agent_id, base_price, signature, timestamp, nonce)
+    return price, karma
 
-    # Opt-in: descuento solo si la firma verifica. Sin firma → base_price.
-    if not (signature and timestamp is not None and nonce):
-        return base_price, 0
-    if not _verify_signature(agent_id, signature, timestamp, nonce):
-        return base_price, 0
 
-    if not _verify_mark(agent_id):
-        return base_price, 0
-    karma = _get_karma(agent_id)
-    for threshold, fraction in TIERS:
-        if karma >= threshold:
-            price = max(1, int(base_price * fraction))
-            return price, karma
-    return base_price, 0
+def karma_discount_signed(
+    agent_id: str,
+    base_price: int,
+    signature: str = "",
+    timestamp=None,
+    nonce: str = "",
+) -> tuple:
+    """
+    Returns (price, karma, sig_verified) — extended API exposing the signature
+    verification flag as an explicit third element.
+
+    Use this when the caller needs to differentiate a signed-but-unknown agent
+    (sig_verified=True, karma=0, price=base) from an anonymous caller
+    (sig_verified=False, karma=0, price=base). Both pay base price but only
+    the first one has an authenticated identity.
+    """
+    return _compute_discount(agent_id, base_price, signature, timestamp, nonce)
