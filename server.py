@@ -10,6 +10,7 @@ from duckduckgo_search import DDGS
 from dotenv import load_dotenv
 
 import arb_pay
+import mycelium_trails
 from karma_pricing import karma_discount_signed, sanitize_agent_id
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -36,6 +37,13 @@ _started_at = time.time()
 mcp = FastMCP("Web Search MCP", host="0.0.0.0")
 
 FEEDBACK_FILE = Path(__file__).parent / "feedback.jsonl"
+TRAILS_DB = str(Path(__file__).parent / "trails.db")
+TRAILS_ENABLED = os.getenv("MYCELIUM_TRAILS_ENABLED", "true").lower() != "false"
+if TRAILS_ENABLED:
+    mycelium_trails.init_db(TRAILS_DB)
+
+# {payment_hash: {agent_id, karma, nonce}} — poblado en get_invoice cuando sig_verified
+_invoice_meta: dict = {}
 
 
 def create_invoice(amount: int, description: str) -> dict:
@@ -103,8 +111,10 @@ def get_invoice(agent_id: str = "", signature: str = "", timestamp: int = 0, non
         you get karma tiers: 1-20=7 sats | 21-50=5 sats | 50+=3 sats.
     Tiers: no mark=10 sats | karma 1-20=7 sats | 21-50=5 sats | 50+=3 sats."""
     agent_id = sanitize_agent_id(agent_id)
-    price, karma, _ = karma_discount_signed(agent_id, SEARCH_PRICE_SATS, signature=signature, timestamp=timestamp or None, nonce=nonce)
+    price, karma, sig_verified = karma_discount_signed(agent_id, SEARCH_PRICE_SATS, signature=signature, timestamp=timestamp or None, nonce=nonce)
     invoice = create_invoice(price, "Giskard Search")
+    if sig_verified and agent_id and TRAILS_ENABLED:
+        _invoice_meta[invoice["payment_hash"]] = {"agent_id": agent_id, "karma": karma, "nonce": nonce}
 
     discount_note = ""
     if agent_id and price < SEARCH_PRICE_SATS:
@@ -158,6 +168,7 @@ def search_web(query: str, payment_hash: str = "", tx_hash: str = "", max_result
         arb_pay.mark_used(pid)
     else:
         return "Provide payment_hash (Lightning) or tx_hash (Arbitrum)."
+    _record_trail(payment_hash, "search_web")
     return do_search(query, max_results)
 
 
@@ -183,6 +194,7 @@ def search_news(query: str, payment_hash: str = "", tx_hash: str = "", max_resul
         arb_pay.mark_used(pid)
     else:
         return "Provide payment_hash (Lightning) or tx_hash (Arbitrum)."
+    _record_trail(payment_hash, "search_news")
     return do_news(query, max_results)
 
 
@@ -202,6 +214,26 @@ def report(useful: bool, note: str = "") -> str:
     with open(FEEDBACK_FILE, "a") as f:
         f.write(json.dumps(entry) + "\n")
     return "Feedback recorded. Thank you."
+
+
+def _record_trail(payment_hash: str, operation: str) -> None:
+    if not TRAILS_ENABLED:
+        return
+    meta = _invoice_meta.pop(payment_hash, None)
+    if not meta:
+        return
+    try:
+        mycelium_trails.record_trail(
+            TRAILS_DB,
+            agent_id=meta["agent_id"],
+            service=SERVICE_NAME,
+            operation=operation,
+            nonce=meta["nonce"],
+            karma_at_time=meta["karma"],
+            success=True,
+        )
+    except Exception:
+        pass
 
 
 # --- x402 REST API (USDC on Base Sepolia) ---
@@ -225,6 +257,18 @@ routes = {
 rest_app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=x402_server)
 
 
+@rest_app.get("/status")
+async def status_rest():
+    return JSONResponse({
+        "service": SERVICE_NAME,
+        "version": SERVICE_VERSION,
+        "port": SERVICE_PORT,
+        "uptime_seconds": int(time.time() - _started_at),
+        "healthy": bool(PHOENIXD_PASSWORD),
+        "dependencies": ["phoenixd", "duckduckgo", "arbitrum-rpc"],
+    })
+
+
 @rest_app.post("/search")
 async def search_x402(request: Request):
     """Web search via x402. POST: {\"query\": \"...\"}. Costs $0.001 USDC on Base Sepolia."""
@@ -243,6 +287,30 @@ async def news_x402(request: Request):
     if not query:
         return JSONResponse({"error": "query is required"}, status_code=400)
     return JSONResponse({"results": do_news(query)})
+
+
+@rest_app.get("/trails/{agent_id}")
+async def trails_by_agent(agent_id: str, limit: int = 50):
+    if not TRAILS_ENABLED:
+        return JSONResponse({"error": "trails disabled"}, status_code=404)
+    rows = mycelium_trails.list_trails_by_agent(TRAILS_DB, agent_id, limit=limit)
+    return {"agent_id": agent_id, "count": len(rows), "trails": rows}
+
+
+@rest_app.get("/trails")
+async def trails_feed(service: str = "", since: int = 0, limit: int = 200):
+    if not TRAILS_ENABLED:
+        return JSONResponse({"error": "trails disabled"}, status_code=404)
+    rows = mycelium_trails.list_trails_by_service(TRAILS_DB, service=service or None, since_ts=since, limit=limit)
+    return {"service": service or "all", "since": since, "count": len(rows), "trails": rows}
+
+
+@rest_app.get("/trails/count/{agent_id}")
+async def trails_count(agent_id: str):
+    if not TRAILS_ENABLED:
+        return JSONResponse({"error": "trails disabled"}, status_code=404)
+    n = mycelium_trails.count_trails_today(TRAILS_DB, agent_id)
+    return {"agent_id": agent_id, "trails_today": n}
 
 
 if __name__ == "__main__":
