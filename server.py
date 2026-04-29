@@ -36,6 +36,21 @@ _started_at = time.time()
 
 mcp = FastMCP("Web Search MCP", host="0.0.0.0")
 
+# Expose /status on the MCP SSE port (8000) so public tunnel can serve it
+from starlette.routing import Route as _StarletteRoute
+from starlette.responses import JSONResponse as _StarletteJSON
+from starlette.requests import Request as _StarletteRequest
+
+async def _status_handler(request: _StarletteRequest):
+    return _StarletteJSON({
+        "service": SERVICE_NAME, "version": SERVICE_VERSION, "port": SERVICE_PORT,
+        "uptime_seconds": int(time.time() - _started_at),
+        "healthy": bool(PHOENIXD_PASSWORD),
+        "dependencies": ["phoenixd", "duckduckgo", "arbitrum-rpc"],
+    })
+
+mcp._custom_starlette_routes.append(_StarletteRoute("/status", _status_handler))
+
 FEEDBACK_FILE = Path(__file__).parent / "feedback.jsonl"
 TRAILS_DB = str(Path(__file__).parent / "trails.db")
 TRAILS_ENABLED = os.getenv("MYCELIUM_TRAILS_ENABLED", "true").lower() != "false"
