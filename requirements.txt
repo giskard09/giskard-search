@@ -1,0 +1,8 @@
+duckduckgo-search
+fastapi
+httpx
+mcp
+python-dotenv
+uvicorn
+web3
+x402
