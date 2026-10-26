@@ -88,7 +88,7 @@ python3 server.py
 
 ## Payment contracts
 
-- Arbitrum One: `0xD467CD1e34515d58F98f8Eb66C0892643ec86AD3`
+- Arbitrum One: `0xe40E376cD32b03E3084F9E0d646155D0Ba0A63ae`
 - x402 wallet: `0xdcc84e9798e8eb1b1b48a31b8f35e5aa7b83dbf4`
 
 ---
